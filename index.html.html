@@ -58,6 +58,15 @@ body{background:radial-gradient(900px 420px at 85% -8%,color-mix(in srgb,var(--a
 @keyframes cf{to{transform:translate(var(--x),var(--y)) rotate(var(--r));opacity:0}}
 .orb{width:150px;height:150px;border-radius:50%;margin:20px auto;background:radial-gradient(circle,var(--a),color-mix(in srgb,var(--a) 20%,transparent));animation:br 8s ease-in-out infinite}@keyframes br{0%,100%{transform:scale(.6);opacity:.6}50%{transform:scale(1.15);opacity:1}}
 .dt{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);background:none;cursor:pointer;font:700 .7rem 'DM Sans';color:var(--mute)}.dt.on{background:var(--a);border-color:var(--a);color:var(--bg)}
+#auth{min-height:100vh;display:grid;place-items:center;padding:22px}
+.auth-card{width:min(100%,430px);background:var(--s);border:1px solid var(--line);border-radius:24px;padding:26px;box-shadow:0 18px 40px -28px #000a}
+.auth-card h1{font:400 3rem 'Pinyon Script',cursive;color:var(--a);margin:0}
+.auth-card p{color:var(--mute)}
+.auth-card input{width:100%;margin:7px 0 12px}
+.auth-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}
+#auth-msg{min-height:24px;color:var(--bad);font-size:.9rem}
+#app-shell{display:none}
+.user-bar{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-bottom:10px;color:var(--mute);font-size:.82rem}
 #caught{position:fixed;inset:0;z-index:80;background:#000a;backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px}.cbox{background:var(--s);border:2px solid var(--a2);border-radius:22px;padding:26px;max-width:420px;text-align:center;animation:pp .35s}@keyframes pp{from{transform:scale(.7);opacity:0}}
 body{background:radial-gradient(700px 500px at 90% -10%,color-mix(in srgb,var(--a) 22%,transparent),transparent),radial-gradient(600px 500px at -10% 40%,color-mix(in srgb,var(--a2) 14%,transparent),transparent),radial-gradient(800px 500px at 60% 112%,color-mix(in srgb,var(--a) 14%,transparent),transparent),var(--bg);background-attachment:fixed}
 .card,.stat{background:color-mix(in srgb,var(--s) 78%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border:1px solid color-mix(in srgb,var(--ink) 9%,transparent);border-radius:24px;box-shadow:0 18px 40px -28px #000a}.card{padding:20px}
@@ -79,8 +88,31 @@ body::before{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none
 @media(prefers-reduced-motion:reduce){*{transition:none!important}.cf{display:none}.orb,body::before{animation:none}}
 </style></head>
 <body>
-<div class="app"><aside id="nav"></aside><main id="v"></main></div>
+<section id="auth">
+  <div class="auth-card">
+    <h1>Inkwell</h1>
+    <h2 style="font-size:1.6rem">Your own little space.</h2>
+    <p>Sign in to keep your tracker private and synced across your devices.</p>
+    <form id="auth-form">
+      <label for="auth-email">Email</label>
+      <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required>
+      <label for="auth-password">Password</label>
+      <input id="auth-password" type="password" autocomplete="current-password" minlength="6" placeholder="At least 6 characters" required>
+      <div class="auth-actions">
+        <button class="btn" type="submit" id="signin-btn">Log in</button>
+        <button class="btn ghost" type="button" id="signup-btn">Create account</button>
+      </div>
+    </form>
+    <p id="auth-msg" role="status"></p>
+    <p class="hint">Each account has its own private tracker. Use your own account and don't share your password.</p>
+  </div>
+</section>
+<div id="app-shell">
+  <div class="user-bar"><span id="user-email"></span><button class="chip" id="logout-btn" type="button">Log out</button></div>
+  <div class="app"><aside id="nav"></aside><main id="v"></main></div>
+</div>
 <div id="ov"></div><div id="toast" role="alert"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const $=s=>document.querySelector(s),P=n=>String(n).padStart(2,'0'),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const dk=d=>d.getFullYear()+'-'+P(d.getMonth()+1)+'-'+P(d.getDate());
@@ -88,11 +120,32 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const T=dk(new Date()),CUR='₹',EC=['Food','Travel','Study','Shopping','Bills','Other'],AS=['Applied','Interview','Offer','Rejected'];
 const H=m=>(m/60).toFixed(1)+'h',M=n=>CUR+Math.round(n).toLocaleString('en-IN');
 const MSG=['Phone down. No Instagram, no YouTube until the timer ends.','One thing only. Stay with this page.','Breathe. Eyes on the work, not the feed.','Future you is grateful. Keep going.','Distraction can wait 25 minutes. Your goals can’t.'];
-let S={tasks:[],sess:[],topics:[],subs:['General'],exp:[],trips:[],apps:[],budget:0,xp:0,goal:60,bd:[],q:{},mood:{},habits:[],exams:[],pal:'gold'},tab='today',wk=0,mo=T.slice(0,7),ed=T,F={subj:'General',topic:'',mins:25,markDone:false,run:false},ref=null,st='Saved on this device';
+const SUPABASE_URL='https://kuhumujalstatyvifsia.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_fxAxjVV9ibnAx8NyXRJEIA_EaLVMtKj';
+const sbClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+let currentUser=null;
+let S={tasks:[],sess:[],topics:[],subs:['General'],exp:[],trips:[],apps:[],budget:0,xp:0,goal:60,bd:[],q:{},mood:{},habits:[],exams:[],pal:'dusk'},tab='today',wk=0,mo=T.slice(0,7),ed=T,F={subj:'General',topic:'',mins:25,markDone:false,run:false},st='Not synced';
 try{Object.assign(S,JSON.parse(localStorage.getItem('inkwell')||'{}'))}catch(e){}
-let sv=null;const save=()=>{chk();try{localStorage.setItem('inkwell',JSON.stringify(S))}catch(e){}clearTimeout(sv);if(ref)sv=setTimeout(()=>ref.set(JSON.parse(JSON.stringify(S))).then(()=>{st='Synced to your account';foot()}).catch(()=>{}),600)};
+let sv=null;
 const foot=()=>{const f=$('#sf');if(f)f.textContent=st};
-(async()=>{try{const[u,db]=await Promise.all([claude.use('user'),claude.use('db')]);if(!u||!db)return;ref=db.doc('data/users/'+await u.id()+'/app');const s=await ref.get();if(s.exists)Object.assign(S,s.data());else save();st='Synced to your account';render()}catch(e){}})();
+const save=()=>{chk();try{localStorage.setItem('inkwell',JSON.stringify(S))}catch(e){}clearTimeout(sv);if(currentUser){st='Saving…';foot();sv=setTimeout(async()=>{const {error}=await sbClient.from('user_data').upsert({user_id:currentUser.id,data:S,updated_at:new Date().toISOString()},{onConflict:'user_id'});st=error?'Sync error — '+error.message:'Synced to your account';foot()},500)}};
+function authMessage(message,isError=true){const el=$('#auth-msg');if(el){el.textContent=message;el.style.color=isError?'var(--bad)':'var(--a)'}}
+async function loadUserData(user){currentUser=user;$('#auth').style.display='none';$('#app-shell').style.display='block';$('#user-email').textContent=user.email||'Signed in';st='Loading your tracker…';render();foot();
+ const {data,error}=await sbClient.from('user_data').select('data').eq('user_id',user.id).maybeSingle();
+ if(error){st='Database setup needed';foot();toast('Please finish the database setup shown in the instructions.');return}
+ if(data&&data.data){S=Object.assign(S,data.data);try{localStorage.setItem('inkwell',JSON.stringify(S))}catch(e){}}
+ else {const {error:saveError}=await sbClient.from('user_data').upsert({user_id:user.id,data:S,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(saveError){st='Could not save yet';foot();toast(saveError.message);return}}
+ st='Synced to your account';render();foot();
+}
+async function startAuth(){
+ const {data:{session}}=await sbClient.auth.getSession();
+ if(session?.user)await loadUserData(session.user);else{$('#auth').style.display='grid';$('#app-shell').style.display='none'}
+ sbClient.auth.onAuthStateChange((event,session)=>{if(session?.user&&event==='SIGNED_IN')setTimeout(()=>loadUserData(session.user),0);else if(event==='SIGNED_OUT'){currentUser=null;$('#app-shell').style.display='none';$('#auth').style.display='grid';authMessage('You have been logged out.',false)}});
+}
+$('#auth-form').addEventListener('submit',async e=>{e.preventDefault();const email=$('#auth-email').value.trim(),password=$('#auth-password').value;authMessage('Signing in…',false);const {error}=await sbClient.auth.signInWithPassword({email,password});authMessage(error?error.message:'Signed in!',!error)});
+$('#signup-btn').addEventListener('click',async()=>{const email=$('#auth-email').value.trim(),password=$('#auth-password').value;if(!email||password.length<6){authMessage('Enter your email and a password with at least 6 characters.');return}authMessage('Creating your account…',false);const {data,error}=await sbClient.auth.signUp({email,password});if(error)authMessage(error.message);else if(data.session)authMessage('Account created. Signing you in…',false);else authMessage('Account created! Check your email to confirm, then log in.',false)});
+$('#logout-btn').addEventListener('click',async()=>{await sbClient.auth.signOut()});
+startAuth().catch(e=>authMessage(e.message));
 const TABS=[['today','🏠 Today'],['focus','🎯 Focus'],['week','🗓 Week plan'],['rewards','🏆 Quests & habits'],['money','🪙 Money'],['travel','🧭 Travel'],['apply','💼 Opportunities'],['month','📊 Month review']];
 const tk=(t)=>`<li class="it ${t.done?'done':''}"><button class="chk" data-a="tog" data-id="${t.id}" aria-label="Toggle ${esc(t.t)}"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button><span class="tt">${esc(t.t)}</span>${t.s?`<span class="tag">${esc(t.s)}</span>`:''}<button class="x" data-a="del" data-id="${t.id}" aria-label="Delete">×</button></li>`;
 const inp=(id,ph,ty='text',ex='')=>`<input class="g" id="${id}" type="${ty}" placeholder="${ph}" ${ex}>`;
